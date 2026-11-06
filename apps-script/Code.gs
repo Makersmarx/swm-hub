@@ -27,14 +27,17 @@ const MON = { Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6, Jul: 7, Aug: 8, Se
 /* ---------------- web app ---------------- */
 
 function doGet() {
-  return json_(readAll_());
+  try { return json_(readAll_()); } catch (err) { console.error(err); return json_({ error: 'unavailable' }); }
 }
 
 function doPost(e) {
   let body;
   try { body = JSON.parse(e.postData.contents); } catch (err) { return json_({ error: 'bad_request' }); }
+  if (!body || typeof body !== 'object' || typeof body.pid !== 'string' || typeof body.gid !== 'string' || typeof body.v !== 'string') {
+    return json_({ error: 'bad_request' });
+  }
   const lock = LockService.getScriptLock();
-  lock.waitLock(10000);
+  try { lock.waitLock(10000); } catch (err) { return json_({ error: 'busy' }); }
   try {
     const m = model_();
     const p = m.players.find(x => x.id === body.pid);
@@ -44,6 +47,9 @@ function doPost(e) {
     writeRsvp_(m, p, g, v);
     SpreadsheetApp.flush();
     return json_({ ok: true });
+  } catch (err) {
+    console.error(err);
+    return json_({ error: 'unavailable' });
   } finally {
     lock.releaseLock();
   }
