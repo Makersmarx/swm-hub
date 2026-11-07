@@ -120,6 +120,10 @@ select,input[type=text],input[type=number],input[type=time]{font:inherit;color:v
 .pill.done{background:var(--surface-2);color:var(--muted)}
 .score{font-family:var(--display);font-weight:800;font-size:20px}
 .score.W{color:var(--in)} .score.L{color:var(--out)} .score.D{color:var(--wait)}
+.played{margin-top:14px}
+.played summary{cursor:pointer;font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:6px 0;width:fit-content}
+.played summary:focus-visible{outline:2px solid var(--bib);outline-offset:2px}
+.played .sched{margin-top:8px}
 .edit-link{background:none;border:0;padding:0;color:var(--muted);font-size:12px;text-decoration:underline}
 
 /* board */
@@ -220,6 +224,10 @@ textarea.copybox{width:100%;min-height:120px;font:inherit;font-size:13px;backgro
       <div><h2>Schedule</h2><p id="sched-sub">8 games · full indoor field</p></div>
     </div>
     <div class="sched" id="sched" style="margin-top:12px"></div>
+    <details class="played" id="played" hidden>
+      <summary id="played-sum">Played games</summary>
+      <div class="sched" id="played-list"></div>
+    </details>
   </section>
 
   <section id="league">
@@ -384,7 +392,7 @@ textarea.copybox{width:100%;min-height:120px;font:inherit;font-size:13px;backgro
 
   function renderSched() {
     const ng = nextGame();
-    $("#sched").innerHTML = S.games.map(g => {
+    const card = g => {
       const n = count(g,"in"), out = count(g,"out"), tot = Math.max(S.players.length, 1), past = isPast(g), r = result(g), [cls, txt] = status(g);
       const sc = scoreOf(g);
       const right = past ? (r ? `<span class="score num ${r}">${r} ${sc.us}–${sc.them}</span>` : `<span class="pill done">Played</span>`) : `<span class="pill ${cls}">${txt}</span>`;
@@ -395,20 +403,25 @@ textarea.copybox{width:100%;min-height:120px;font:inherit;font-size:13px;backgro
         <div class="bar" title="${n} in, ${out} out, ${S.players.length-n-out} no reply"><i class="bi" style="width:${n/tot*100}%"></i><i class="bw" style="width:${(tot-n-out)/tot*100}%"></i><span class="tick" style="left:calc(${S.minPlayers/tot*100}% - 1px)"></span></div>
         <div class="g-foot"><span class="num">${n} in · ${out} out · ${S.players.length-n-out} no reply</span>${S.canAdmin ? `<button class="edit-link" data-edit="${g.id}">Edit${past ? " score" : ""}</button>` : ""}</div>
       </article>`;
-    }).join("") || `<div class="empty">No games yet.</div>`;
+    };
+    const upcoming = S.games.filter(g => !isPast(g)), played = S.games.filter(isPast).reverse();
+    $("#sched").innerHTML = upcoming.map(card).join("") || `<div class="empty">${S.games.length ? "No games left this season." : "No games yet."}</div>`;
+    $("#played").hidden = !played.length;
+    $("#played-sum").textContent = `Played games (${played.length})`;
+    $("#played-list").innerHTML = played.map(card).join("");
   }
 
   function renderBoard() {
-    const ng = nextGame(), t = $("#board");
+    const ng = nextGame(), t = $("#board"), games = S.games.filter(g => !isPast(g));
     if (!S.players.length) { t.innerHTML = `<tbody><tr><td class="empty">No players on the roster yet.</td></tr></tbody>`; return; }
-    const head = `<thead><tr><th class="pl">Player</th>${S.games.map(g => `<th class="${g===ng?"next":""}">${esc(label(g))}<small>${esc(fDate(g).replace(/^\w+, /,""))}</small></th>`).join("")}<th>Rate</th></tr></thead>`;
+    if (!games.length) { t.innerHTML = `<tbody><tr><td class="empty">No games left this season.</td></tr></tbody>`; return; }
+    t.style.minWidth = `${180 + games.length * 72}px`;
+    const head = `<thead><tr><th class="pl">Player</th>${games.map(g => `<th class="${g===ng?"next":""}">${esc(label(g))}<small>${esc(fDate(g).replace(/^\w+, /,""))}</small></th>`).join("")}</tr></thead>`;
     const sym = { in: "✓", out: "✕", "": "?" };
-    const body = S.players.map(p => {
-      const ins = S.games.filter(g => rs(p,g)==="in").length;
-      return `<tr><td class="pl${p.id===S.me?" mine":""}">${esc(p.name)}</td>${S.games.map(g => { const v = rs(p,g); return `<td class="cell"><button class="c ${v}" data-cycle="1" data-p="${p.id}" data-g="${g.id}" aria-label="${esc(p.name)}, ${esc(label(g))}: ${v==="in"?"in":v==="out"?"out":"no reply"}"${S.canWrite?"":" disabled"}>${sym[v]}</button></td>`; }).join("")}<td class="rate num">${Math.round(ins / Math.max(S.games.length,1) * 100)}%</td></tr>`;
-    }).join("");
-    const tot = S.games.reduce((a,g) => a + count(g,"in"), 0);
-    const foot = `<tfoot><tr><td class="pl">Confirmed</td>${S.games.map(g => { const [cls] = status(g); return `<td class="num" style="color:var(--${cls==="ready"?"in":cls==="tight"?"wait":"out"})">${count(g,"in")}</td>`; }).join("")}<td class="num">${Math.round(tot / Math.max(S.games.length*S.players.length,1) * 100)}%</td></tr></tfoot>`;
+    const body = S.players.map(p =>
+      `<tr><td class="pl${p.id===S.me?" mine":""}">${esc(p.name)}</td>${games.map(g => { const v = rs(p,g); return `<td class="cell"><button class="c ${v}" data-cycle="1" data-p="${p.id}" data-g="${g.id}" aria-label="${esc(p.name)}, ${esc(label(g))}: ${v==="in"?"in":v==="out"?"out":"no reply"}"${S.canWrite?"":" disabled"}>${sym[v]}</button></td>`; }).join("")}</tr>`
+    ).join("");
+    const foot = `<tfoot><tr><td class="pl">Confirmed</td>${games.map(g => { const [cls] = status(g); return `<td class="num" style="color:var(--${cls==="ready"?"in":cls==="tight"?"wait":"out"})">${count(g,"in")}</td>`; }).join("")}</tr></tfoot>`;
     t.innerHTML = head + `<tbody>${body}</tbody>` + foot;
     $("#board-sub").textContent = S.canWrite ? "Tap a box to switch between In, Out and No reply. Changes save to the team sheet for everyone." : "View only. Ask the team manager for edit access to update availability.";
   }
