@@ -439,7 +439,7 @@ textarea.copybox{width:100%;min-height:120px;font:inherit;font-size:13px;backgro
 
 
   /* ---------- data: the team Google Sheet, through its Apps Script web app ---------- */
-  const API = ""; // Slay Queens sheet web app /exec URL
+  const API = "https://script.google.com/macros/s/AKfycbwZLHGc8FWJlN_y2NPf_EeiijD1GgDK91c3nddVNeKu41hHIWgBNiU8s_FzzBraGN1S5w/exec"; // Slay Queens sheet web app
   const queues = {}; let pending = 0, reloadT;
   function enqueue(key, fn) {
     pending++;
