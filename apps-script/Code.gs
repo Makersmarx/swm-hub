@@ -6,7 +6,8 @@
  *
  * Sheet layout it reads (as it exists today):
  *  - "Schedule & Attendance": player grid under the "Player Name" header (checkbox TRUE = in),
- *    game table under the "Game #" header.
+ *    game table under the "Game #" header. "As needed" in the Roster Type column marks a player
+ *    who only joins the games checked on their row.
  *  - "Sheet2": extra Wed Nov 18 game, names in column A, "x" in Yes (B) or No (C).
  *  - "Replies": created by this script; holds "out" marks for regular games
  *    (a checkbox can only say in / not in).
@@ -69,9 +70,11 @@ function model_() {
   const gameHdrRow = vals.findIndex(r => r[1] === 'Game #');
   if (hdrRow < 0 || gameHdrRow < 0) throw new Error('Sheet layout changed: header not found');
 
+  const typeCol = vals[hdrRow].indexOf('Roster Type');
   const players = [];
   for (let r = hdrRow + 1; r < vals.length && vals[r][1] && vals[r][1] !== 'Confirmed Attending'; r++) {
-    players.push({ id: 'p' + (r + 1), row: r + 1, full: vals[r][1].trim(), name: short_(vals[r][1]) });
+    players.push({ id: 'p' + (r + 1), row: r + 1, full: vals[r][1].trim(), name: short_(vals[r][1]),
+      asNeeded: typeCol >= 0 && /as needed/i.test(vals[r][typeCol]) });
   }
 
   const games = [];
@@ -105,7 +108,7 @@ function readAll_() {
         rsvp[g.id] = checked ? 'in' : outKey[p.full + '|' + g.id] ? 'out' : '';
       }
     });
-    return { id: p.id, name: p.name, order: p.row, rsvp: rsvp };
+    return { id: p.id, name: p.name, order: p.row, asNeeded: p.asNeeded, rsvp: rsvp };
   });
 
   const games = m.games.map(g => ({ id: g.id, n: g.n, type: g.type, date: g.date, time: g.time, ha: g.ha, opp: g.opp, venue: g.venue }));

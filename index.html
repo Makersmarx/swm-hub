@@ -136,6 +136,8 @@ thead th small{display:block;font-family:var(--body);font-weight:500;letter-spac
 th.pl,td.pl{position:sticky;left:0;z-index:1;background:var(--surface);text-align:left;padding:8px 12px;font-family:var(--body);font-weight:600;font-size:14px;letter-spacing:0;text-transform:none;color:var(--fg);white-space:nowrap;border-right:1px solid var(--line)}
 td.pl.mine{box-shadow:inset 3px 0 0 var(--bib)}
 td.cell{padding:4px}
+td.group,td.pl.group{background:var(--surface-2);padding:6px 12px;font-size:12px;color:var(--muted);text-align:left}
+td.pl.group{font-family:var(--display);font-weight:700;text-transform:uppercase;letter-spacing:.08em}
 .c{width:100%;min-width:44px;height:34px;border-radius:6px;border:1px dashed var(--line);background:transparent;font-weight:700;font-size:15px;color:var(--muted)}
 .c.in{background:var(--in-bg);border:1px solid transparent;color:var(--in)}
 .c.out{background:var(--out-bg);border:1px solid transparent;color:var(--out)}
@@ -277,7 +279,12 @@ textarea.copybox{width:100%;min-height:120px;font:inherit;font-size:13px;backgro
   const isPast = g => when(g).getTime() + 2*3600e3 < Date.now();
   const label = g => g.type === "Extra" ? "Extra" : `Game ${g.n}`;
   const rs = (p, g) => (p.rsvp && p.rsvp[g.id]) || "";
-  const count = (g, v) => S.players.filter(p => rs(p, g) === v).length;
+  /* As-needed players add to a game only when marked in; they are never "out" or awaited. */
+  const core = () => S.players.filter(p => !p.asNeeded);
+  const extras = () => S.players.filter(p => p.asNeeded);
+  const count = (g, v) => (v === "in" ? S.players : core()).filter(p => rs(p, g) === v).length;
+  const squad = g => core().length + extras().filter(p => rs(p, g) === "in").length;
+  const waiting = g => core().filter(p => !rs(p, g));
   const status = g => { const n = count(g,"in"), m = S.minPlayers; return n >= m + 2 ? ["ready","Ready"] : n >= m ? ["tight","Tight"] : ["short","Short"]; };
   const TEAM = "SWM 12/13B Premier";
   const fixtureFor = g => S.league && (S.league.fixtures || []).find(f => f.date === g.date && (f.home === TEAM || f.away === TEAM));
@@ -315,7 +322,7 @@ textarea.copybox{width:100%;min-height:120px;font:inherit;font-size:13px;backgro
     S.games.forEach(g => { const r = result(g); if (!r) return; const s = scoreOf(g); r==="W"?W++:r==="D"?D++:L++; GF += +s.us; GA += +s.them; });
     $("#record").innerHTML = [["W",W],["D",D],["L",L],["GF",GF],["GA",GA]].map(([k,v]) => `<div><b class="num">${v}</b><span>${k}</span></div>`).join("");
     const reg = S.games.filter(g => g.type !== "Extra").length;
-    $("#sched-sub").textContent = `${reg} season games${S.games.length > reg ? " + " + (S.games.length - reg) + " extra" : ""} · ${S.players.length} players`;
+    $("#sched-sub").textContent = `${reg} season games${S.games.length > reg ? " + " + (S.games.length - reg) + " extra" : ""} · ${core().length} players${extras().length ? ` + ${extras().length} as needed` : ""}`;
   }
 
   let clockTimer;
@@ -323,9 +330,9 @@ textarea.copybox{width:100%;min-height:120px;font:inherit;font-size:13px;backgro
     const g = nextGame(), el = $("#hero");
     clearInterval(clockTimer);
     if (!g) { el.innerHTML = `<div><div class="eyebrow">Season complete</div><h3>That's a wrap</h3></div>`; return; }
-    const n = count(g,"in"), out = count(g,"out"), wait = S.players.length - n - out, [cls, txt] = status(g);
-    const waitNames = S.players.filter(p => !rs(p,g)).map(p => p.name.split(" ")[0]);
-    const pips = S.players.map((_, i) => `<i class="pip${i < n ? " on" : ""}${i === S.minPlayers - 1 ? " min" : ""}"></i>`).join("");
+    const n = count(g,"in"), out = count(g,"out"), wait = waiting(g).length, [cls, txt] = status(g);
+    const waitNames = waiting(g).map(p => p.name.split(" ")[0]);
+    const pips = Array.from({ length: squad(g) }, (_, i) => `<i class="pip${i < n ? " on" : ""}${i === S.minPlayers - 1 ? " min" : ""}"></i>`).join("");
     el.innerHTML = `
       <div>
         <div class="eyebrow">Next match · ${esc(label(g))}</div>
@@ -340,7 +347,7 @@ textarea.copybox{width:100%;min-height:120px;font:inherit;font-size:13px;backgro
       </div>
       <div class="readiness">
         <div class="eyebrow">Confirmed players</div>
-        <div class="big num">${n}<small> / ${S.players.length}</small></div>
+        <div class="big num">${n}<small> / ${squad(g)}</small></div>
         <div class="pips" title="Underlined bar marks the minimum of ${S.minPlayers}">${pips}</div>
         <div class="names"><b>${txt === "Short" ? `Short by ${S.minPlayers - n}` : txt === "Tight" ? "Enough to play, few subs" : "Ready, subs available"}</b> · ${out} out · ${wait} no reply${waitNames.length ? `<br>Waiting on: ${esc(waitNames.join(", "))}` : ""}</div>
         <div class="actions"><button class="btn bib" id="copyRem">Copy reminder for team chat</button></div>
@@ -356,7 +363,7 @@ textarea.copybox{width:100%;min-height:120px;font:inherit;font-size:13px;backgro
   }
 
   function reminderText(g) {
-    const ins = S.players.filter(p => rs(p,g)==="in").map(p => p.name), wait = S.players.filter(p => !rs(p,g)).map(p => p.name), outs = S.players.filter(p => rs(p,g)==="out").map(p => p.name);
+    const ins = S.players.filter(p => rs(p,g)==="in").map(p => p.name), wait = waiting(g).map(p => p.name), outs = core().filter(p => rs(p,g)==="out").map(p => p.name);
     return [`SWM 12/13B Premier: ${label(g)} vs ${g.opp}`, `${fDate(g)} at ${fTime(g)} (${g.ha}), ${g.venue || "indoor"}`, ``,
       `IN (${ins.length}): ${ins.join(", ") || "nobody yet"}`, outs.length ? `OUT (${outs.length}): ${outs.join(", ")}` : null,
       wait.length ? `STILL NEED A REPLY (${wait.length}): ${wait.join(", ")}` : `Everyone has replied.`,
@@ -374,6 +381,7 @@ textarea.copybox{width:100%;min-height:120px;font:inherit;font-size:13px;backgro
 
   function seg(p, g) {
     const v = rs(p,g), dis = S.canWrite ? "" : " disabled";
+    if (p.asNeeded) return `<div class="seg" role="group" aria-label="${esc(label(g))}"><button class="in${v==="in"?" on":""}" data-p="${p.id}" data-g="${g.id}" data-v="in"${dis} aria-pressed="${v==="in"}">Can join</button></div>`;
     return `<div class="seg" role="group" aria-label="${esc(label(g))}"><button class="in${v==="in"?" on":""}" data-p="${p.id}" data-g="${g.id}" data-v="in"${dis} aria-pressed="${v==="in"}">In</button><button class="out${v==="out"?" on":""}" data-p="${p.id}" data-g="${g.id}" data-v="out"${dis} aria-pressed="${v==="out"}">Out</button></div>`;
   }
   function renderMe() {
@@ -393,15 +401,15 @@ textarea.copybox{width:100%;min-height:120px;font:inherit;font-size:13px;backgro
   function renderSched() {
     const ng = nextGame();
     const card = g => {
-      const n = count(g,"in"), out = count(g,"out"), tot = Math.max(S.players.length, 1), past = isPast(g), r = result(g), [cls, txt] = status(g);
+      const n = count(g,"in"), out = count(g,"out"), wait = waiting(g).length, tot = Math.max(squad(g), 1), past = isPast(g), r = result(g), [cls, txt] = status(g);
       const sc = scoreOf(g);
       const right = past ? (r ? `<span class="score num ${r}">${r} ${sc.us}–${sc.them}</span>` : `<span class="pill done">Played</span>`) : `<span class="pill ${cls}">${txt}</span>`;
       return `<article class="g${g === ng ? " next" : ""}${past ? " past" : ""}">
         <div class="g-top"><span class="g-n">${esc(label(g))} · ${esc(g.ha)}</span>${right}</div>
         <div class="g-date">${esc(fDate(g))} <span style="color:var(--muted);font-weight:600">${esc(fTime(g))}</span></div>
         <div class="g-opp"><span class="vs">${g.ha === "Home" ? "vs" : "@"}</span> ${esc(g.opp)}</div>
-        <div class="bar" title="${n} in, ${out} out, ${S.players.length-n-out} no reply"><i class="bi" style="width:${n/tot*100}%"></i><i class="bw" style="width:${(tot-n-out)/tot*100}%"></i><span class="tick" style="left:calc(${S.minPlayers/tot*100}% - 1px)"></span></div>
-        <div class="g-foot"><span class="num">${n} in · ${out} out · ${S.players.length-n-out} no reply</span>${S.canAdmin ? `<button class="edit-link" data-edit="${g.id}">Edit${past ? " score" : ""}</button>` : ""}</div>
+        <div class="bar" title="${n} in, ${out} out, ${wait} no reply"><i class="bi" style="width:${n/tot*100}%"></i><i class="bw" style="width:${(tot-n-out)/tot*100}%"></i><span class="tick" style="left:calc(${S.minPlayers/tot*100}% - 1px)"></span></div>
+        <div class="g-foot"><span class="num">${n} in · ${out} out · ${wait} no reply</span>${S.canAdmin ? `<button class="edit-link" data-edit="${g.id}">Edit${past ? " score" : ""}</button>` : ""}</div>
       </article>`;
     };
     const upcoming = S.games.filter(g => !isPast(g)), played = S.games.filter(isPast).reverse();
@@ -418,9 +426,9 @@ textarea.copybox{width:100%;min-height:120px;font:inherit;font-size:13px;backgro
     t.style.minWidth = `${180 + games.length * 72}px`;
     const head = `<thead><tr><th class="pl">Player</th>${games.map(g => `<th class="${g===ng?"next":""}">${esc(label(g))}<small>${esc(fDate(g).replace(/^\w+, /,""))}</small></th>`).join("")}</tr></thead>`;
     const sym = { in: "✓", out: "✕", "": "?" };
-    const body = S.players.map(p =>
-      `<tr><td class="pl${p.id===S.me?" mine":""}">${esc(p.name)}</td>${games.map(g => { const v = rs(p,g); return `<td class="cell"><button class="c ${v}" data-cycle="1" data-p="${p.id}" data-g="${g.id}" aria-label="${esc(p.name)}, ${esc(label(g))}: ${v==="in"?"in":v==="out"?"out":"no reply"}"${S.canWrite?"":" disabled"}>${sym[v]}</button></td>`; }).join("")}</tr>`
-    ).join("");
+    const row = p => `<tr><td class="pl${p.id===S.me?" mine":""}">${esc(p.name)}</td>${games.map(g => { const v = rs(p,g); return `<td class="cell"><button class="c ${v}" data-cycle="1" data-p="${p.id}" data-g="${g.id}" aria-label="${esc(p.name)}, ${esc(label(g))}: ${v==="in"?"in":v==="out"?"out":p.asNeeded?"not joining":"no reply"}"${S.canWrite?"":" disabled"}>${v ? sym[v] : p.asNeeded ? "–" : sym[""]}</button></td>`; }).join("")}</tr>`;
+    const guests = extras();
+    const body = core().map(row).join("") + (guests.length ? `<tr><td class="pl group">As needed</td><td class="group" colspan="${games.length}">Tap a game they can join. Only checked games count.</td></tr>` + guests.map(row).join("") : "");
     const foot = `<tfoot><tr><td class="pl">Confirmed</td>${games.map(g => { const [cls] = status(g); return `<td class="num" style="color:var(--${cls==="ready"?"in":cls==="tight"?"wait":"out"})">${count(g,"in")}</td>`; }).join("")}</tr></tfoot>`;
     t.innerHTML = head + `<tbody>${body}</tbody>` + foot;
     $("#board-sub").textContent = S.canWrite ? "Tap a box to switch between In, Out and No reply. Changes save to the team sheet for everyone." : "View only. Ask the team manager for edit access to update availability.";
@@ -428,7 +436,7 @@ textarea.copybox{width:100%;min-height:120px;font:inherit;font-size:13px;backgro
 
   function renderStats() {
     const tot = Math.max(S.games.length,1);
-    const rows = S.players.map(p => ({ p, n: S.games.filter(g => rs(p,g)==="in").length, w: S.games.filter(g => !rs(p,g) && !isPast(g)).length })).sort((a,b) => b.n - a.n || a.p.name.localeCompare(b.p.name));
+    const rows = S.players.map(p => ({ p, n: S.games.filter(g => rs(p,g)==="in").length, w: p.asNeeded ? 0 : S.games.filter(g => !rs(p,g) && !isPast(g)).length })).sort((a,b) => b.n - a.n || a.p.name.localeCompare(b.p.name));
     $("#stats").innerHTML = rows.map(({p,n,w}) => `<div class="st"><span class="nm">${esc(p.name)}</span><span class="v num">${n}/${S.games.length}${w ? ` <span style="color:var(--muted);font-weight:500;font-size:13px">· ${w} no reply</span>` : ""}</span><div class="bar"><i class="bi" style="width:${n/tot*100}%"></i></div></div>`).join("");
   }
 
@@ -455,7 +463,7 @@ textarea.copybox{width:100%;min-height:120px;font:inherit;font-size:13px;backgro
 
   document.addEventListener("click", e => {
     const b = e.target.closest("button"); if (!b || b.disabled) return;
-    if (b.dataset.cycle) { const p = S.players.find(x => x.id === b.dataset.p), g = S.games.find(x => x.id === b.dataset.g); const cur = rs(p,g); setRsvp(p.id, g.id, cur === "" ? "in" : cur === "in" ? "out" : ""); }
+    if (b.dataset.cycle) { const p = S.players.find(x => x.id === b.dataset.p), g = S.games.find(x => x.id === b.dataset.g); const cur = rs(p,g); setRsvp(p.id, g.id, cur === "" ? "in" : cur === "in" && !p.asNeeded ? "out" : ""); }
     else if (b.dataset.v) { const p = S.players.find(x => x.id === b.dataset.p), g = S.games.find(x => x.id === b.dataset.g); const v = b.dataset.v; setRsvp(p.id, g.id, rs(p,g) === v ? "" : v); }
   });
 
