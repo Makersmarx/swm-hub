@@ -2,7 +2,7 @@
  * SWM 12/13B Premier hub: backend for the public GitHub Pages site.
  * Paste into the team Google Sheet: Extensions > Apps Script, replace Code.gs, Save.
  * Then: Deploy > New deployment > Web app, Execute as "Me", Who has access "Anyone".
- * Run installTriggers() once to turn on the Thu + Sat league refresh.
+ * Run installTriggers() once to turn on the league refresh (daily 6 AM, plus Wed + Fri ~9 PM after games).
  *
  * Sheet layout it reads (as it exists today):
  *  - "Schedule & Attendance": player grid under the "Player Name" header (checkbox TRUE = in),
@@ -177,7 +177,7 @@ function refreshLeague() {
   if (stand.length < 2) throw new Error('too few teams parsed');
   stand.sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf || a.team.localeCompare(b.team));
 
-  const fix = fx.slice(1).map(r => {
+  const fix = fx.slice(1).filter(r => /\w+-\w{3} \d+/.test(r[0])).map(r => {
     const sc = r[2].match(/(\d+)\s*-\s*(\d+)/), t = t24_(r[4]);
     return [ezDate_(r[0]), t || '', r[1], r[3], sc ? +sc[1] : '', sc ? +sc[2] : '', sc ? 'final' : (t ? 'scheduled' : r[4])];
   });
@@ -200,8 +200,10 @@ function refreshLeague() {
 
 function installTriggers() {
   ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'refreshLeague').forEach(t => ScriptApp.deleteTrigger(t));
-  [ScriptApp.WeekDay.THURSDAY, ScriptApp.WeekDay.SATURDAY].forEach(d =>
-    ScriptApp.newTrigger('refreshLeague').timeBased().onWeekDay(d).atHour(8).create());
+  ScriptApp.newTrigger('refreshLeague').timeBased().everyDays(1).atHour(6).create();
+  // Same-night scores after Wed and Fri games (runs within the 9-10 PM hour, script time zone).
+  [ScriptApp.WeekDay.WEDNESDAY, ScriptApp.WeekDay.FRIDAY].forEach(d =>
+    ScriptApp.newTrigger('refreshLeague').timeBased().onWeekDay(d).atHour(21).create());
 }
 
 /* ---------------- helpers ---------------- */
