@@ -287,11 +287,15 @@ textarea.copybox{width:100%;min-height:120px;font:inherit;font-size:13px;backgro
   const waiting = g => core().filter(p => !rs(p, g));
   const status = g => { const n = count(g,"in"), m = S.minPlayers; return n >= m + 2 ? ["ready","Ready"] : n >= m ? ["tight","Tight"] : ["short","Short"]; };
   const TEAM = "SWM 12/13B Premier";
-  const fixtureFor = g => S.league && (S.league.fixtures || []).find(f => f.date === g.date && (f.home === TEAM || f.away === TEAM));
-  const scoreOf = g => { const s = g.score; if (s && s.us != null && s.them != null) return s; const f = fixtureFor(g); if (f && f.hs != null) return f.home === TEAM ? { us: f.hs, them: f.as } : { us: f.as, them: f.hs }; return null; };
+  /* EZLeagues labels SWM teams by coach ("SWM 12/13B (Torres)") while the team sheet uses "Premier"/"DA", so compare on the age group. */
+  const tkey = n => { const s = String(n ?? "").trim(), m = s.match(/^SWM \d+\/\d+\w*/i); return (m ? m[0] : s).toLowerCase(); };
+  const same = (a, b) => tkey(a) === tkey(b);
+  const isUs = n => same(n, TEAM);
+  const fixtureFor = g => S.league && (S.league.fixtures || []).find(f => f.date === g.date && (isUs(f.home) || isUs(f.away)));
+  const scoreOf = g => { const s = g.score; if (s && s.us != null && s.them != null) return s; const f = fixtureFor(g); if (f && f.hs != null) return isUs(f.home) ? { us: f.hs, them: f.as } : { us: f.as, them: f.hs }; return null; };
   const result = g => { const s = scoreOf(g); if (!s) return null; return s.us > s.them ? "W" : s.us < s.them ? "L" : "D"; };
   const ord = n => n + (["th","st","nd","rd"][(n % 100 - 20) % 10] || ["th","st","nd","rd"][n % 100] || "th");
-  const posOf = team => { const st = S.league && S.league.standings || []; const i = st.findIndex(r => r.team === team); return i < 0 ? null : { pos: i + 1, row: st[i] }; };
+  const posOf = team => { const st = S.league && S.league.standings || []; const i = st.findIndex(r => same(r.team, team)); return i < 0 ? null : { pos: i + 1, row: st[i] }; };
   const nextGame = () => S.games.find(g => !isPast(g));
 
   function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, 2600); }
@@ -307,10 +311,10 @@ textarea.copybox{width:100%;min-height:120px;font:inherit;font-size:13px;backgro
     const L = S.league, t = $("#standings"), fx = $("#fixtures");
     if (!L || !(L.standings || []).length) { t.innerHTML = `<tbody><tr><td class="empty">League table not loaded yet.</td></tr></tbody>`; fx.innerHTML = ""; $("#lgsrc").textContent = ""; return; }
     t.innerHTML = `<thead><tr><th></th><th class="tm">Team</th><th>GP</th><th>W</th><th>T</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th></tr></thead><tbody>` +
-      L.standings.map((r, i) => `<tr class="${r.team === TEAM ? "us" : ""}"><td class="pos">${i + 1}</td><td class="tm">${esc(r.team)}</td><td>${r.gp}</td><td>${r.w}</td><td>${r.t}</td><td>${r.l}</td><td>${r.gf}</td><td>${r.ga}</td><td>${r.gd > 0 ? "+" : ""}${r.gd}</td><td class="pts">${r.pts}</td></tr>`).join("") + `</tbody>`;
+      L.standings.map((r, i) => `<tr class="${isUs(r.team) ? "us" : ""}"><td class="pos">${i + 1}</td><td class="tm">${esc(r.team)}</td><td>${r.gp}</td><td>${r.w}</td><td>${r.t}</td><td>${r.l}</td><td>${r.gf}</td><td>${r.ga}</td><td>${r.gd > 0 ? "+" : ""}${r.gd}</td><td class="pts">${r.pts}</td></tr>`).join("") + `</tbody>`;
     const all = L.fixtures || [], done = all.filter(f => f.hs != null), todayIso = new Date().toISOString().slice(0, 10), up = all.filter(f => f.hs == null && f.date >= todayIso);
     const dd = iso => { const [y, m, d] = iso.split("-").map(Number); const t = new Date(y, m - 1, d); return `${DOW[t.getDay()]} ${MON[m - 1]} ${d}`; };
-    const nm = s => s === TEAM ? `<span class="me-t">${esc(s)}</span>` : esc(s);
+    const nm = s => isUs(s) ? `<span class="me-t">${esc(s)}</span>` : esc(s);
     const row = f => `<div class="fx-row"><span class="d">${dd(f.date)}</span><span class="h">${nm(f.home)}</span><span class="s num">${f.hs != null ? `${f.hs}–${f.as}` : (f.time ? fTime({ date: f.date, time: f.time }) : "v")}</span><span class="a">${nm(f.away)}</span></div>`;
     fx.innerHTML = `<h3>Latest results</h3>${done.slice(-4).reverse().map(row).join("") || `<div class="fx-row" style="grid-template-columns:1fr">No results yet.</div>`}<h3>Coming up</h3>${up.slice(0, 5).map(row).join("") || `<div class="fx-row" style="grid-template-columns:1fr">No games left.</div>`}`;
     const when2 = L.scrapedAt ? new Date(L.scrapedAt) : null;
