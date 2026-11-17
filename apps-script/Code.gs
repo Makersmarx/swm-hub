@@ -8,7 +8,8 @@
  *  - "Schedule & Attendance": player grid under the "Player Name" header (checkbox TRUE = in),
  *    game table under the "Game #" header. "As needed" in the Roster Type column marks a player
  *    who only joins the games checked on their row.
- *  - "Sheet2": extra Wed Nov 18 game, names in column A, "x" in Yes (B) or No (C).
+ *  - "Sheet2": sign-up tab for the cancelled extra Wed Nov 18 game (names in column A, "x" in
+ *    Yes (B) or No (C)). No longer read; see EXTRA_GAMES to add an extra game again.
  *  - "Replies": created by this script; holds "out" marks for regular games
  *    (a checkbox can only say in / not in).
  *  - "League": standings + fixtures, refreshed from EZLeagues by refreshLeague().
@@ -18,10 +19,10 @@ const MAIN = 'Schedule & Attendance';
 const REPLIES = 'Replies';
 const LEAGUE = 'League';
 const MIN_PLAYERS = 7;
-const EXTRA_GAMES = [
-  { id: 'x1', date: '2026-11-18', time: null, ha: 'TBC', opp: 'TBC', venue: 'Indoor',
-    sheet: 'Sheet2', firstRow: 3, nameCol: 1, yesCol: 2, noCol: 3 },
-];
+// Extra (non-league) games, each backed by its own sign-up tab. None right now. Entry shape:
+//   { id: 'x1', date: '2026-11-18', time: '18:30', ha: 'Home', opp: 'Opponent', venue: 'Indoor',
+//     sheet: 'Sheet2', firstRow: 3, nameCol: 1, yesCol: 2, noCol: 3 }
+const EXTRA_GAMES = [];
 const LEAGUE_URL = 'https://stjoekickers.ezleagues.ezfacility.com/leagues/481959/26-27-Indoor-1-MS-Oberliga.aspx';
 const MON = { Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6, Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12 };
 
